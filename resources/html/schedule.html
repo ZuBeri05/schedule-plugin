@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的课表</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "PingFang SC", "Microsoft YaHei", "WenQuanYi Micro Hei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      /* 柔和的背景渐变区分层次 */
+      background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);
+      color: #334155;
+      padding: 40px 20px;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      background: #FFFFFF;
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 700px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid #E2E8F0;
+    }
+
+    .header h1 {
+      font-size: 32px;
+      color: #0F172A;
+      margin-bottom: 12px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .date-info {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .date {
+      font-size: 18px;
+      color: #FFFFFF;
+      font-weight: 600;
+      background: #3B82F6;
+      padding: 6px 16px;
+      border-radius: 100px;
+      box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+    }
+
+    .timezone {
+      font-size: 14px;
+      color: #64748B;
+      background: #F8FAFC;
+      padding: 4px 10px;
+      border-radius: 100px;
+      border: 1px solid #E2E8F0;
+    }
+
+    .no-course {
+      text-align: center;
+      padding: 60px 20px;
+      color: #94A3B8;
+    }
+
+    .no-course svg {
+      margin-bottom: 16px;
+      color: #CBD5E1;
+    }
+
+    .no-course .text {
+      font-size: 18px;
+      font-weight: 500;
+      color: #64748B;
+    }
+
+    .course-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      position: relative;
+    }
+
+    .course-item {
+      /* 给课程卡片赋予淡雅蓝灰色底色和永久阴影，静态截图时立体感分明 */
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 16px;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.08); /* 永久静态阴影 */
+    }
+
+    /* 左侧装饰条加粗并赋予鲜艳颜色 */
+    .course-item::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      background: #3B82F6;
+    }
+
+    .course-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      gap: 16px;
+    }
+
+    .course-time {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 16px;
+      font-weight: 700;
+      color: #1D4ED8;
+      background: #EFF6FF;
+      padding: 6px 12px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #BFDBFE;
+    }
+
+    .course-name {
+      font-size: 22px;
+      font-weight: 800;
+      color: #0F172A;
+      line-height: 1.3;
+    }
+
+    .course-details {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .detail-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 15px;
+      color: #475569;
+      background: #F8FAFC;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #F1F5F9;
+    }
+
+    .detail-row svg {
+      flex-shrink: 0;
+      margin-top: 2px;
+      color: #64748B;
+    }
+
+    .abandoned-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: #FEF2F2;
+      color: #DC2626;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      margin-top: 30px;
+      border: 1px solid #FCA5A5;
+    }
+
+    .footer {
+      margin-top: 40px;
+      text-align: center;
+      color: #94A3B8;
+      font-size: 13px;
+      padding-top: 24px;
+      border-top: 1px solid #E2E8F0;
+    }
+
+    @media (max-width: 500px) {
+      .course-header {
+        flex-direction: column-reverse;
+      }
+      .course-time {
+        align-self: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>我的课表</h1>
+      <div class="date-info">
+        <span class="date">{{date}}</span>
+        {{if timezone}}
+        <span class="timezone">{{timezone}}</span>
+        {{/if}}
+      </div>
+    </div>
+
+    {{if courses.length === 0}}
+    <div class="no-course">
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 8h1a4 4 0 1 1 0 8h-1"></path>
+        <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path>
+        <line x1="6" y1="2" x2="6" y2="4"></line>
+        <line x1="10" y1="2" x2="10" y2="4"></line>
+        <line x1="14" y1="2" x2="14" y2="4"></line>
+      </svg>
+      <div class="text">今日无课，好好休息</div>
+    </div>
+    {{else}}
+    <div class="course-list">
+      {{each courses course}}
+      <div class="course-item">
+        <div class="course-header">
+          <div class="course-name">{{course.name}}</div>
+          <div class="course-time">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            {{course.startTime}} - {{course.endTime}}
+          </div>
+        </div>
+        
+        <div class="course-details">
+          {{if course.location}}
+          <div class="detail-row">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+            <span>{{course.location}}</span>
+          </div>
+          {{/if}}
+          
+          {{if course.note}}
+          <div class="detail-row">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <span>{{course.note}}</span>
+          </div>
+          {{/if}}
+        </div>
+      </div>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{if isAbandoned}}
+    <div class="abandoned-badge">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+        <line x1="12" y1="9" x2="12" y2="13"></line>
+        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </svg>
+      今日已标记翘课
+    </div>
+    {{/if}}
+
+    <div class="footer">
+      <div>生成时间: {{timestamp}}</div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>群友在上什么课</title>
+  <style>
+    :root {
+      /* 加深了底色(bg)饱和度，并增加了边框色(border)，解决与纯白容器混淆的问题 */
+      --c0-bg: #FCE7F3; --c0-border: #FBCFE8; --c0-main: #EC4899; --c0-dark: #9D174D; /* 粉色 */
+      --c1-bg: #FEE2E2; --c1-border: #FECACA; --c1-main: #EF4444; --c1-dark: #991B1B; /* 红色 */
+      --c2-bg: #FFEDD5; --c2-border: #FED7AA; --c2-main: #F97316; --c2-dark: #9A3412; /* 橙色 */
+      --c3-bg: #DBEAFE; --c3-border: #BFDBFE; --c3-main: #3B82F6; --c3-dark: #1E40AF; /* 蓝色 */
+      --c4-bg: #DCFCE7; --c4-border: #BBF7D0; --c4-main: #22C55E; --c4-dark: #166534; /* 绿色 */
+      --c5-bg: #F1F5F9; --c5-border: #E2E8F0; --c5-main: #64748B; --c5-dark: #334155; /* 灰色 */
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      /* 为 Puppeteer 增加更稳健的服务器中文字体栈 */
+      font-family: "PingFang SC", "Microsoft YaHei", "WenQuanYi Micro Hei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      /* 第1层：柔和的页面背景渐变 */
+      background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);
+      color: #334155;
+      padding: 40px 20px;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      /* 第2层：主容器保持纯白，通过大面积阴影与背景分离 */
+      background: #FFFFFF;
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.1), 0 0 20px rgba(255, 255, 255, 0.5) inset;
+      width: 100%;
+      max-width: 1000px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .header h1 {
+      font-size: 36px;
+      color: #0F172A;
+      margin-bottom: 8px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .header .subtitle {
+      font-size: 16px;
+      color: #64748B;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .schedule-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .schedule-item {
+      /* 第3层：独立的卡片层。增加实体边框和轻度阴影，确保在静态截图中质感分明 */
+      display: flex;
+      align-items: center;
+      padding: 20px 24px;
+      border-radius: 16px;
+      position: relative;
+      box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.05), 0 2px 6px -2px rgba(0, 0, 0, 0.03); /* 清爽立体静态阴影 */
+    }
+
+    /* 赋予卡片清晰的底色和同色系深色边框，彻底与纯白容器划清界限 */
+    .schedule-item.type-0 { background: var(--c0-bg); border: 1px solid var(--c0-border); }
+    .schedule-item.type-1 { background: var(--c1-bg); border: 1px solid var(--c1-border); }
+    .schedule-item.type-2 { background: var(--c2-bg); border: 1px solid var(--c2-border); }
+    .schedule-item.type-3 { background: var(--c3-bg); border: 1px solid var(--c3-border); }
+    .schedule-item.type-4 { background: var(--c4-bg); border: 1px solid var(--c4-border); }
+    .schedule-item.type-5 { background: var(--c5-bg); border: 1px solid var(--c5-border); }
+
+    /* 左侧彩色指示条 */
+    .schedule-item::before {
+      content: '';
+      position: absolute;
+      left: -1px; /* 稍微往左靠一点，盖住部分border */
+      top: 18px;
+      bottom: 18px;
+      width: 5px;
+      border-radius: 0 4px 4px 0;
+    }
+    .schedule-item.type-0::before { background: var(--c0-main); }
+    .schedule-item.type-1::before { background: var(--c1-main); }
+    .schedule-item.type-2::before { background: var(--c2-main); }
+    .schedule-item.type-3::before { background: var(--c3-main); }
+    .schedule-item.type-4::before { background: var(--c4-main); }
+    .schedule-item.type-5::before { background: var(--c5-main); }
+
+    .avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      margin-right: 20px;
+      object-fit: cover;
+      background-color: #FFFFFF;
+      /* 给头像加个纯白描边和阴影，在彩色卡片中跳出来 */
+      border: 3px solid #FFFFFF;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+      flex-shrink: 0;
+    }
+
+    .info-container {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .primary-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .secondary-info {
+      text-align: right;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    .nickname {
+      font-size: 18px;
+      font-weight: 700;
+      color: #0F172A;
+      margin-bottom: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .course-name {
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* 课程名字使用深色调，保证可读性 */
+    .course-name.type-0 { color: var(--c0-dark); }
+    .course-name.type-1 { color: var(--c1-dark); }
+    .course-name.type-2 { color: var(--c2-dark); }
+    .course-name.type-3 { color: var(--c3-dark); }
+    .course-name.type-4 { color: var(--c4-dark); }
+    .course-name.type-5 { color: var(--c5-dark); }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #FFFFFF;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    /* 徽章使用强调色(反色)，在浅色卡片中非常醒目 */
+    .status-badge.type-0 { background: var(--c0-main); }
+    .status-badge.type-1 { background: var(--c1-main); }
+    .status-badge.type-2 { background: var(--c2-main); }
+    .status-badge.type-3 { background: var(--c3-main); }
+    .status-badge.type-4 { background: var(--c4-main); }
+    .status-badge.type-5 { background: var(--c5-main); }
+
+    .course-time {
+      font-size: 14px;
+      color: #475569;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 500;
+    }
+
+    .footer {
+      margin-top: 40px;
+      padding-top: 24px;
+      border-top: 1px solid #E2E8F0;
+      text-align: center;
+    }
+
+    .footer .meta {
+      color: #94A3B8;
+      font-size: 13px;
+    }
+
+    .footer .prompt {
+      margin-top: 8px;
+      color: #64748B;
+      font-size: 14px;
+      background: #F1F5F9;
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 100px;
+    }
+
+    @media (max-width: 640px) {
+      .info-container {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .secondary-info {
+        align-items: flex-start;
+        text-align: left;
+      }
+      .status-badge {
+        margin-bottom: 4px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>群友在上什么课</h1>
+      <div class="subtitle">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        实时课程状态追踪
+      </div>
+    </div>
+
+    <div class="schedule-list">
+      {{each results item}}
+      <div class="schedule-item type-{{item.type}}">
+        <img class="avatar" src="https://q1.qlogo.cn/g?b=qq&nk={{item.userId}}&s=640" alt="avatar">
+        
+        <div class="info-container">
+          <div class="primary-info">
+            <div class="nickname">{{item.nickname}}</div>
+            <div class="course-name type-{{item.type}}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+              </svg>
+              {{item.mainDesc}}
+            </div>
+          </div>
+          
+          <div class="secondary-info">
+            <div class="status-badge type-{{item.type}}">{{statusTypes[item.type]}}</div>
+            <div class="course-time">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              {{item.subDesc}}
+            </div>
+          </div>
+        </div>
+      </div>
+      {{/each}}
+    </div>
+
+    <div class="footer">
+      <div class="prompt">使用 #课表帮助 指令查看如何导入课程表</div>
+      <div class="meta" style="margin-top: 12px;">By ZuBeri · {{timestamp}} · {{groupId}}</div>
+    </div>
+  </div>
+</body>
+</html>

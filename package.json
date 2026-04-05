@@ -1,0 +1,17 @@
+{
+  "name": "yunzai-schedule-plugin",
+  "version": "1.0.0",
+  "description": "云崽课程表插件 - 支持WakeUp、小爱课程表、ICS日历导入",
+  "type": "module",
+  "main": "index.js",
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "node-ical": "^0.18.0"
+  },
+  "devDependencies": {},
+  "peerDependencies": {
+    "puppeteer": "*"
+  }
+}
