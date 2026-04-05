@@ -1,6 +1,6 @@
-# 云崽课程表插件
+# schedule-plugin
 
-基于 BLBot 课程表功能移植的云崽机器人插件，支持多平台课程表导入和精美的图片展示。
+基于 BLBot 课程表功能移植的云崽机器人插件，支持多平台课程表导入。
 
 ## ✨ 功能特性
 
@@ -15,19 +15,30 @@
 
 ### 1. 下载插件
 
-将 `yunzai-schedule-plugin` 文件夹放到云崽的 `plugins` 目录下
+### 使用Git安装（推荐）
+
+请将 schedule-plugin 放置在 Yunzai-Bot 的 plugins 目录下，重启 Yunzai-Bot 后即可使用。
+
+请使用 git 进行安装，以方便后续升级。在 Yunzai-Bot 根目录夹打开终端，运行下述指令之一
+
+```
+// 使用 GitHub
+git clone --depth=1 https://github.com/ZuBeri05/schedule-plugin.git plugins/schedule-plugin
+
+// 使用 Github加速代理（国内无法访问Github使用）
+git clone --depth=1 https://wget.la/https://github.com/ZuBeri05/schedule-plugin.git plugins/schedule-plugin
+```
+### 手工下载安装（不推荐）
+
+手工下载安装包，解压后将`schedule-plugin-master`更名为`schedule-plugin`，然后放置在Yunzai的plugins目录内
 
 ### 2. 安装依赖
 
 在云崽根目录执行：
 
 ```bash
-pnpm install axios node-ical -w
+pnpm install -C plugins/schedule-plugin
 ```
-
-### 3. 重启云崽
-
-重启机器人即可自动加载插件
 
 ## 📖 使用指南
 
@@ -56,19 +67,19 @@ pnpm install axios node-ical -w
 ### 查询课表
 
 ```bash
-#课表              # 查看今日课表
-#课表 明天         # 查看明天课表
-#课表 2024-03-15   # 查看指定日期课表
-群友在上什么课      # 查看群友课表状态
-群友在上什么课 明天  # 查看群友明天课表
+#课表
+#课表 明天
+#课表 2024-03-15
+#群友在上什么课
+#群友在上什么课 明天 
 ```
 
 ### 其他功能
 
 ```bash
-#翘课              # 标记/取消今日翘课
-#删除课表          # 删除课表数据
-#课表帮助          # 查看帮助
+#翘课
+#删除课表
+#课表帮助
 ```
 
 ### 支持的日期格式
