@@ -97,7 +97,7 @@ pnpm install -C plugins/schedule-plugin
 
 ## 🙏 致谢
 
-本插件基于 [BLBot](https://github.com/BLumia/BLBot) 的课程表功能移植而来，感谢原作者的优秀设计。
+本插件基于 [BLBot](https://github.com/BobLiu0518/BLBot) 的课程表功能移植而来，感谢原作者的优秀设计。
 
 ## 📄 许可证
 
