@@ -192,6 +192,16 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           </div>
           <div class="flex flex-col">
+            <span class="command-title font-bold text-base">#课表@某人</span>
+            <span class="desc-text text-xs mt-0.5">查看他人课表</span>
+          </div>
+        </div>
+
+        <div class="item-row flex items-center gap-3 p-2">
+          <div class="icon-box">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div class="flex flex-col">
             <span class="command-title font-bold text-base">群友在上什么课</span>
             <span class="desc-text text-xs mt-0.5">查看群友课表状态</span>
           </div>
@@ -203,17 +213,17 @@
           </div>
           <div class="flex flex-col">
             <span class="command-title font-bold text-base">群友在上什么课 明天</span>
-            <span class="desc-text text-xs mt-0.5">查看群友明天课表</span>
+            <span class="desc-text text-xs mt-0.5">查看群友指定日期课表</span>
           </div>
         </div>
 
       </div>
     </div>
 
-    <!-- 其他功能 -->
+    <!-- 翘课/请假 -->
     <div class="glass-card">
       <div class="card-header px-5 py-3">
-        <h3 class="text-white font-bold text-lg tracking-widest">其他功能</h3>
+        <h3 class="text-white font-bold text-lg tracking-widest">翘课 / 请假</h3>
       </div>
       <div class="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         
@@ -223,7 +233,77 @@
           </div>
           <div class="flex flex-col">
             <span class="command-title font-bold text-base">#翘课</span>
-            <span class="desc-text text-xs mt-0.5">标记/取消今日翘课</span>
+            <span class="desc-text text-xs mt-0.5">翘当前课/下一节课</span>
+          </div>
+        </div>
+
+        <div class="item-row flex items-center gap-3 p-2">
+          <div class="icon-box">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          </div>
+          <div class="flex flex-col">
+            <span class="command-title font-bold text-base">#翘课 课程名/序号</span>
+            <span class="desc-text text-xs mt-0.5">翘指定课程</span>
+          </div>
+        </div>
+
+        <div class="item-row flex items-center gap-3 p-2">
+          <div class="icon-box">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+          </div>
+          <div class="flex flex-col">
+            <span class="command-title font-bold text-base">#取消翘课 课程名/序号</span>
+            <span class="desc-text text-xs mt-0.5">取消翘课</span>
+          </div>
+        </div>
+
+        <div class="item-row flex items-center gap-3 p-2">
+          <div class="icon-box" style="background: linear-gradient(135deg, rgba(234, 88, 12, 0.2) 0%, rgba(234, 88, 12, 0.05) 100%); border-color: rgba(234, 88, 12, 0.2); color: #EA580C;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+          </div>
+          <div class="flex flex-col">
+            <span class="command-title font-bold text-base" style="color: #FB923C;">#请假</span>
+            <span class="desc-text text-xs mt-0.5">全天请假</span>
+          </div>
+        </div>
+
+        <div class="item-row flex items-center gap-3 p-2">
+          <div class="icon-box" style="background: linear-gradient(135deg, rgba(234, 88, 12, 0.2) 0%, rgba(234, 88, 12, 0.05) 100%); border-color: rgba(234, 88, 12, 0.2); color: #EA580C;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+          </div>
+          <div class="flex flex-col">
+            <span class="command-title font-bold text-base" style="color: #FB923C;">#取消请假</span>
+            <span class="desc-text text-xs mt-0.5">取消全天请假</span>
+          </div>
+        </div>
+
+        <div class="item-row flex items-center gap-3 p-2">
+          <div class="icon-box">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></svg>
+          </div>
+          <div class="flex flex-col">
+            <span class="command-title font-bold text-base">#翘课 列表</span>
+            <span class="desc-text text-xs mt-0.5">查看今日课程列表</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 管理员操作 -->
+    <div class="glass-card">
+      <div class="card-header px-5 py-3">
+        <h3 class="text-white font-bold text-lg tracking-widest">管理员操作</h3>
+      </div>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        
+        <div class="item-row flex items-center gap-3 p-2">
+          <div class="icon-box" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(168, 85, 247, 0.05) 100%); border-color: rgba(168, 85, 247, 0.2); color: #A855F7;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+          </div>
+          <div class="flex flex-col">
+            <span class="command-title font-bold text-base" style="color: #C084FC;">指令@某人</span>
+            <span class="desc-text text-xs mt-0.5">翘课/请假/导入/删除 替他人操作</span>
           </div>
         </div>
 

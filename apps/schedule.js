@@ -3,7 +3,6 @@ import ScheduleData from '../model/scheduleData.js'
 import { getCourses, getTimezoneGMTOffset } from '../utils/scheduleUtils.js'
 import { segment } from 'oicq'
 
-// 导入 puppeteer
 let puppeteer = null
 try {
   puppeteer = (await import('../../../lib/puppeteer/puppeteer.js')).default
@@ -11,9 +10,14 @@ try {
   logger.warn('[课程表] 未找到 puppeteer，图片功能将不可用')
 }
 
-/**
- * 课程表主功能
- */
+function courseKey(name, startTime) {
+  return `${name}@${startTime}`
+}
+
+function isSkippedEntry(skippedList, name, startTime) {
+  return skippedList.includes(courseKey(name, startTime))
+}
+
 export class schedule extends plugin {
   constructor() {
     super({
@@ -23,7 +27,7 @@ export class schedule extends plugin {
       priority: 5000,
       rule: [
         {
-          reg: '^#课表$',
+          reg: '^#课表\\s*$',
           fnc: 'checkSchedule'
         },
         {
@@ -31,19 +35,43 @@ export class schedule extends plugin {
           fnc: 'checkScheduleWithDate'
         },
         {
-          reg: '^#(删除|清空)课表$',
+          reg: '^#(删除|清空)课表',
           fnc: 'deleteSchedule'
         },
         {
-          reg: '^#翘课$',
-          fnc: 'toggleAbandoned'
+          reg: '^#翘课\\s*$',
+          fnc: 'skipCourse'
         },
         {
-          reg: '^#课表帮助$',
+          reg: '^#翘课\\s+列表\\s*$',
+          fnc: 'showSkipList'
+        },
+        {
+          reg: '^#翘课\\s+(.+)$',
+          fnc: 'skipCourse'
+        },
+        {
+          reg: '^#取消翘课\\s*$',
+          fnc: 'showUnskipList'
+        },
+        {
+          reg: '^#取消翘课\\s+(.+)$',
+          fnc: 'unskipCourse'
+        },
+        {
+          reg: '^#请假\\s*$',
+          fnc: 'skipAll'
+        },
+        {
+          reg: '^#取消请假\\s*$',
+          fnc: 'unskipAll'
+        },
+        {
+          reg: '^#课表帮助\\s*$',
           fnc: 'showHelp'
         },
         {
-          reg: '^#?群友在上什么课$',
+          reg: '^#?群友在上什么课\\s*$',
           fnc: 'groupScheduleText'
         },
         {
@@ -54,121 +82,145 @@ export class schedule extends plugin {
     })
   }
 
-  /**
-   * 查询今日课表
-   */
+  getTargetUser(e) {
+    let atId = e.at
+    if (Array.isArray(atId)) atId = atId[0]
+    if (atId && String(atId) === String(e.bot?.uin || e.bot?.account?.uin)) atId = null
+    if (atId) {
+      return { userId: atId, isOther: true }
+    }
+    return { userId: e.user_id, isOther: false }
+  }
+
+  isAdmin(e) {
+    if (e.isMaster) return true
+    if (e.member && (e.member.is_admin || e.member.is_owner)) return true
+    return false
+  }
+
+  resolveTargetUser(e, requireAdminForOther = false) {
+    const { userId, isOther } = this.getTargetUser(e)
+    if (isOther && requireAdminForOther && !this.isAdmin(e)) {
+      return { error: true, msg: '仅管理员可替他人操作' }
+    }
+    return { userId, isOther, error: false }
+  }
+
   async checkSchedule(e) {
-    const userId = e.user_id
+    const { userId, isOther } = this.resolveTargetUser(e)
     const data = ScheduleData.getData(userId)
-    
+
     if (!data) {
-      await e.reply('你还没有导入课表哦~\n使用 #导入课表 查看导入方法')
+      await e.reply(isOther ? '该用户尚未导入课表' : '你还没有导入课表哦~\n使用 #导入课表 查看导入方法')
       return true
     }
-    
+
     const courses = getCourses(data)
-    const isAbandoned = ScheduleData.isAbandoned(userId)
-    
+    const dateStr = ScheduleData.getDateString()
+    const skippedList = ScheduleData.getSkippedCourses(userId, dateStr)
+    const isLeave = skippedList.includes('__all__')
+
     if (courses === false) {
       await e.reply('课程表未配置或该学期课程已结束')
       return true
     }
 
-    // 添加备注信息
-    const coursesWithNote = courses.map(course => ({
+    const coursesWithStatus = courses.map(course => ({
       ...course,
-      note: data.note && data.note[course.name] ? data.note[course.name] : null
+      note: data.note && data.note[course.name] ? data.note[course.name] : null,
+      skipped: isLeave || isSkippedEntry(skippedList, course.name, course.startTime)
     }))
 
-    // 渲染图片
+    const skippedCount = coursesWithStatus.filter(c => c.skipped).length
+
     try {
       const now = new Date()
       const renderData = {
         date: `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, '0')}月${String(now.getDate()).padStart(2, '0')}日`,
         timezone: data.timezone !== 'Asia/Shanghai' ? getTimezoneGMTOffset(data.timezone) : null,
-        courses: coursesWithNote,
-        isAbandoned,
-        timestamp: now.toLocaleString('zh-CN', { 
-          year: 'numeric', 
-          month: '2-digit', 
-          day: '2-digit', 
-          hour: '2-digit', 
-          minute: '2-digit', 
+        courses: coursesWithStatus,
+        isLeave,
+        skippedCount,
+        timestamp: now.toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
           second: '2-digit',
-          hour12: false 
+          hour12: false
         })
       }
 
       const img = await this.renderScheduleImage(renderData)
-      
+
       if (img) {
         await e.reply(img)
       } else {
-        // 降级到文字版
-        await this.sendScheduleText(e, coursesWithNote, isAbandoned, data.timezone)
+        await this.sendScheduleText(e, coursesWithStatus, isLeave, data.timezone)
       }
     } catch (err) {
       logger.error('[课程表] 渲染失败:', err)
-      await this.sendScheduleText(e, coursesWithNote, isAbandoned, data.timezone)
+      await this.sendScheduleText(e, coursesWithStatus, isLeave, data.timezone)
     }
-    
+
     return true
   }
 
-  /**
-   * 发送文字版课表
-   */
-  async sendScheduleText(e, courses, isAbandoned, timezone) {
-    if (courses.length === 0) {
-      await e.reply('今日无课~')
-      return
-    }
-
+  async sendScheduleText(e, courses, isLeave, timezone) {
     const msgs = ['今日课程：']
     const tz = getTimezoneGMTOffset(timezone)
     if (tz !== 'GMT+8') {
       msgs.push(`(${tz})`)
     }
-    
-    for (const course of courses) {
-      let msg = `${course.startTime}~${course.endTime} ${course.name}`
-      if (course.location) {
-        msg += ` @ ${course.location}`
+
+    if (courses.length === 0) {
+      msgs.push('今日无课~')
+    } else {
+      for (const course of courses) {
+        let msg = `${course.startTime}~${course.endTime} ${course.name}`
+        if (course.skipped) {
+          msg += '（翘课）'
+        }
+        if (course.location) {
+          msg += ` @ ${course.location}`
+        }
+        if (course.note) {
+          msg += `\n  备注: ${course.note}`
+        }
+        msgs.push(msg)
       }
-      if (course.note) {
-        msg += `\n  备注: ${course.note}`
+    }
+
+    if (isLeave) {
+      msgs.push('\n📋 今日已请假')
+    } else {
+      const skippedNames = courses.filter(c => c.skipped).map(c => c.name)
+      if (skippedNames.length > 0) {
+        msgs.push(`\n🏃 已翘课: ${skippedNames.join('、')}`)
       }
-      msgs.push(msg)
     }
-    
-    if (isAbandoned) {
-      msgs.push('\n⚠️ 今日已标记翘课')
-    }
-    
+
     await e.reply(msgs.join('\n'))
   }
 
-  /**
-   * 查询指定日期课表
-   */
   async checkScheduleWithDate(e) {
-    const userId = e.user_id
-    const dateStr = e.msg.replace(/^#课表\s+/, '').trim()
-    
+    const rawDateStr = e.msg.replace(/^#课表\s+/, '').trim()
+    const { userId, isOther } = this.resolveTargetUser(e)
+    const dateStr = rawDateStr
+
     const data = ScheduleData.getData(userId)
     if (!data) {
-      await e.reply('你还没有导入课表哦~\n使用 #导入课表 查看导入方法')
+      await e.reply(isOther ? '该用户尚未导入课表' : '你还没有导入课表哦~\n使用 #导入课表 查看导入方法')
       return true
     }
-    
-    // 解析日期
+
     let timestamp
     let dateDisplay
     try {
-      // 处理中文日期
       const now = new Date()
       let targetDate = new Date()
-      
+
       if (dateStr === '明天' || dateStr === '明日') {
         targetDate.setDate(now.getDate() + 1)
       } else if (dateStr === '后天') {
@@ -178,165 +230,457 @@ export class schedule extends plugin {
       } else if (dateStr === '今天' || dateStr === '今日') {
         targetDate = now
       } else if (dateStr.match(/^周[一二三四五六日天]$/)) {
-        // 处理"周一"到"周日"
         const weekMap = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 0, '天': 0 }
         const targetWeekday = weekMap[dateStr.charAt(1)]
         const currentWeekday = now.getDay()
         let diff = targetWeekday - currentWeekday
-        if (diff <= 0) diff += 7 // 下周
+        if (diff <= 0) diff += 7
         targetDate.setDate(now.getDate() + diff)
       } else if (dateStr.match(/^下周[一二三四五六日天]$/)) {
-        // 处理"下周一"到"下周日"
         const weekMap = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 0, '天': 0 }
         const targetWeekday = weekMap[dateStr.charAt(2)]
         const currentWeekday = now.getDay()
         let diff = targetWeekday - currentWeekday
         if (diff <= 0) diff += 7
-        diff += 7 // 加一周
+        diff += 7
         targetDate.setDate(now.getDate() + diff)
       } else {
-        // 尝试解析标准日期格式
         targetDate = new Date(dateStr)
         if (isNaN(targetDate.getTime())) {
           throw new Error('Invalid date')
         }
       }
-      
+
       timestamp = Math.floor(targetDate.getTime() / 1000)
       dateDisplay = `${targetDate.getFullYear()}年${String(targetDate.getMonth() + 1).padStart(2, '0')}月${String(targetDate.getDate()).padStart(2, '0')}日`
     } catch {
       await e.reply('日期格式错误\n支持格式：\n- 明天、后天、昨天\n- 周一、周二...周日\n- 下周一、下周二...下周日\n- 2024-03-15')
       return true
     }
-    
+
     const courses = getCourses(data, timestamp)
-    
+
     if (courses === false) {
       await e.reply(`${dateDisplay} 课程表未配置或该学期课程已结束`)
       return true
     }
 
-    // 添加备注信息
-    const coursesWithNote = courses.map(course => ({
+    const targetDateStr = ScheduleData.getDateString(timestamp)
+    const skippedList = ScheduleData.getSkippedCourses(userId, targetDateStr)
+    const isLeave = skippedList.includes('__all__')
+
+    const coursesWithStatus = courses.map(course => ({
       ...course,
-      note: data.note && data.note[course.name] ? data.note[course.name] : null
+      note: data.note && data.note[course.name] ? data.note[course.name] : null,
+      skipped: isLeave || isSkippedEntry(skippedList, course.name, course.startTime)
     }))
 
-    // 渲染图片
+    const skippedCount = coursesWithStatus.filter(c => c.skipped).length
+
     try {
       const renderData = {
         date: dateDisplay,
         timezone: data.timezone !== 'Asia/Shanghai' ? getTimezoneGMTOffset(data.timezone) : null,
-        courses: coursesWithNote,
-        isAbandoned: false,
-        timestamp: new Date().toLocaleString('zh-CN', { 
-          year: 'numeric', 
-          month: '2-digit', 
-          day: '2-digit', 
-          hour: '2-digit', 
-          minute: '2-digit', 
+        courses: coursesWithStatus,
+        isLeave,
+        skippedCount,
+        timestamp: new Date().toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
           second: '2-digit',
-          hour12: false 
+          hour12: false
         })
       }
 
       const img = await this.renderScheduleImage(renderData)
-      
+
       if (img) {
         await e.reply(img)
       } else {
-        // 降级到文字版
-        await this.sendScheduleDateText(e, dateDisplay, coursesWithNote, data.timezone)
+        await this.sendScheduleDateText(e, dateDisplay, coursesWithStatus, data.timezone, isLeave)
       }
     } catch (err) {
       logger.error('[课程表] 渲染失败:', err)
-      await this.sendScheduleDateText(e, dateDisplay, coursesWithNote, data.timezone)
+      await this.sendScheduleDateText(e, dateDisplay, coursesWithStatus, data.timezone, isLeave)
     }
-    
+
     return true
   }
 
-  /**
-   * 发送指定日期文字版课表
-   */
-  async sendScheduleDateText(e, dateDisplay, courses, timezone) {
-    if (courses.length === 0) {
-      await e.reply(`${dateDisplay} 无课~`)
-      return
-    }
-
+  async sendScheduleDateText(e, dateDisplay, courses, timezone, isLeave = false) {
     const msgs = [`${dateDisplay} 课程：`]
     const tz = getTimezoneGMTOffset(timezone)
     if (tz !== 'GMT+8') {
       msgs.push(`(${tz})`)
     }
-    
-    for (const course of courses) {
-      let msg = `${course.startTime}~${course.endTime} ${course.name}`
-      if (course.location) {
-        msg += ` @ ${course.location}`
+
+    if (courses.length === 0) {
+      msgs.push('无课~')
+    } else {
+      for (const course of courses) {
+        let msg = `${course.startTime}~${course.endTime} ${course.name}`
+        if (course.skipped) {
+          msg += '（翘课）'
+        }
+        if (course.location) {
+          msg += ` @ ${course.location}`
+        }
+        if (course.note) {
+          msg += `\n  备注: ${course.note}`
+        }
+        msgs.push(msg)
       }
-      if (course.note) {
-        msg += `\n  备注: ${course.note}`
-      }
-      msgs.push(msg)
     }
-    
+
+    if (isLeave) {
+      msgs.push('\n📋 已请假')
+    } else {
+      const skippedNames = courses.filter(c => c.skipped).map(c => c.name)
+      if (skippedNames.length > 0) {
+        msgs.push(`\n🏃 已翘课: ${skippedNames.join('、')}`)
+      }
+    }
+
     await e.reply(msgs.join('\n'))
   }
 
-  /**
-   * 删除课表
-   */
   async deleteSchedule(e) {
-    const userId = e.user_id
+    const result = this.resolveTargetUser(e, true)
+    if (result.error) {
+      await e.reply(result.msg)
+      return true
+    }
+
+    const { userId, isOther } = result
     const data = ScheduleData.getData(userId)
-    
+
     if (!data) {
       await e.reply('未储存课程表信息')
       return true
     }
-    
+
     const success = ScheduleData.deleteData(userId)
     if (success) {
-      await e.reply(`删除课表「${data.name}」成功`)
+      await e.reply(`删除课表「${data.name}」成功${isOther ? ` (替 <${userId}> 操作)` : ''}`)
     } else {
       await e.reply('删除失败')
     }
-    
+
     return true
   }
 
-  /**
-   * 切换翘课状态
-   */
-  async toggleAbandoned(e) {
-    const userId = e.user_id
-    const data = ScheduleData.getData(userId)
-    
-    if (!data) {
-      await e.reply('尚未导入课表数据，无法设置翘课\n请先使用 #导入课表 导入课表数据')
+  async showSkipList(e) {
+    const result = this.resolveTargetUser(e, true)
+    if (result.error) {
+      await e.reply(result.msg)
       return true
     }
-    
-    const isAbandoned = ScheduleData.isAbandoned(userId)
-    const success = ScheduleData.setAbandoned(userId, !isAbandoned)
-    
+
+    const { userId, isOther } = result
+    const data = ScheduleData.getData(userId)
+
+    if (!data) {
+      await e.reply('尚未导入课表数据\n请先使用 #导入课表 导入课表数据')
+      return true
+    }
+
+    const courses = getCourses(data)
+    if (courses === false) {
+      await e.reply('课程表未配置或该学期课程已结束')
+      return true
+    }
+
+    if (courses.length === 0) {
+      await e.reply('今日无课，无需翘课~')
+      return true
+    }
+
+    const dateStr = ScheduleData.getDateString()
+    const skippedList = ScheduleData.getSkippedCourses(userId, dateStr)
+
+    const msgs = ['📚 今日课程：']
+    for (let i = 0; i < courses.length; i++) {
+      const course = courses[i]
+      const isSkipped = isSkippedEntry(skippedList, course.name, course.startTime) || skippedList.includes('__all__')
+      const skipTag = isSkipped ? ' [已翘课]' : ''
+      msgs.push(`${i + 1}. ${course.startTime}~${course.endTime} ${course.name}${skipTag}`)
+    }
+    msgs.push('')
+    msgs.push('使用 #翘课 序号 或 #翘课 课程名 标记翘课')
+    msgs.push('使用 #请假 标记全天请假')
+
+    if (isOther) {
+      msgs[0] = `📚 <${userId}> 今日课程：`
+    }
+
+    await e.reply(msgs.join('\n'))
+    return true
+  }
+
+  async skipCourse(e) {
+    const result = this.resolveTargetUser(e, true)
+    if (result.error) {
+      await e.reply(result.msg)
+      return true
+    }
+
+    const { userId, isOther } = result
+    const data = ScheduleData.getData(userId)
+
+    if (!data) {
+      await e.reply('尚未导入课表数据\n请先使用 #导入课表 导入课表数据')
+      return true
+    }
+
+    const courses = getCourses(data)
+    if (courses === false || courses.length === 0) {
+      await e.reply('今日无课，无需翘课~')
+      return true
+    }
+
+    let input = e.msg.replace(/^#翘课\s*/, '').trim()
+    input = input.replace(/@\d+\s*$/, '').trim()
+
+    const dateStr = ScheduleData.getDateString()
+    const skippedList = ScheduleData.getSkippedCourses(userId, dateStr)
+
+    if (skippedList.includes('__all__')) {
+      await e.reply('今日已请假，所有课程均标记翘课\n如需取消请先 #取消请假')
+      return true
+    }
+
+    let targetCourse = null
+
+    if (!input) {
+      const now = new Date()
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+
+      let currentCourse = null
+      let nextCourse = null
+
+      for (const course of courses) {
+        if (currentTime >= course.startTime && currentTime < course.endTime) {
+          currentCourse = course
+          break
+        }
+        if (currentTime < course.startTime) {
+          nextCourse = course
+          break
+        }
+      }
+
+      targetCourse = currentCourse || nextCourse
+
+      if (!targetCourse) {
+        await e.reply('今日课程已结束，无需翘课~')
+        return true
+      }
+
+      if (isSkippedEntry(skippedList, targetCourse.name, targetCourse.startTime)) {
+        await e.reply(`「${targetCourse.name}」已经翘课了哦~`)
+        return true
+      }
+    } else {
+      const index = parseInt(input)
+      if (!isNaN(index) && index >= 1 && index <= courses.length) {
+        targetCourse = courses[index - 1]
+      } else {
+        const matched = courses.filter(c => c.name.includes(input))
+        if (matched.length === 1) {
+          targetCourse = matched[0]
+        } else if (matched.length > 1) {
+          const msgs = ['找到多门同名课程，请用序号指定：']
+          for (let i = 0; i < courses.length; i++) {
+            if (courses[i].name.includes(input)) {
+              msgs.push(`${i + 1}. ${courses[i].startTime}~${courses[i].endTime} ${courses[i].name}`)
+            }
+          }
+          await e.reply(msgs.join('\n'))
+          return true
+        } else {
+          await e.reply(`未找到课程「${input}」\n使用 #翘课 列表 查看今日课程列表`)
+          return true
+        }
+      }
+    }
+
+    if (isSkippedEntry(skippedList, targetCourse.name, targetCourse.startTime)) {
+      await e.reply(`「${targetCourse.name}」已经翘课了哦~`)
+      return true
+    }
+
+    const key = courseKey(targetCourse.name, targetCourse.startTime)
+    const success = ScheduleData.skipCourse(userId, dateStr, key)
     if (success) {
-      await e.reply(isAbandoned ? '已取消今日翘课~' : '已设置今日翘课~')
+      const otherHint = isOther ? ` (替 <${userId}> 操作)` : ''
+      await e.reply(`🏃 已翘课: ${targetCourse.name} (${targetCourse.startTime})${otherHint}`)
     } else {
       await e.reply('操作失败')
     }
-    
+
     return true
   }
 
-  /**
-   * 显示帮助
-   */
+  async showUnskipList(e) {
+    const result = this.resolveTargetUser(e, true)
+    if (result.error) {
+      await e.reply(result.msg)
+      return true
+    }
+
+    const { userId, isOther } = result
+    const dateStr = ScheduleData.getDateString()
+    const skippedList = ScheduleData.getSkippedCourses(userId, dateStr)
+
+    if (skippedList.length === 0) {
+      await e.reply('今日没有翘课记录~')
+      return true
+    }
+
+    if (skippedList.includes('__all__')) {
+      await e.reply('今日已请假（全天翘课）\n使用 #取消请假 取消')
+      return true
+    }
+
+    const msgs = ['🏃 今日已翘课课程：']
+    for (let i = 0; i < skippedList.length; i++) {
+      const entry = skippedList[i]
+      const atIndex = entry.indexOf('@')
+      const displayName = atIndex > 0 ? `${entry.substring(0, atIndex)} (${entry.substring(atIndex + 1)})` : entry
+      msgs.push(`${i + 1}. ${displayName}`)
+    }
+    msgs.push('')
+    msgs.push('使用 #取消翘课 序号 或 #取消翘课 课程名 取消翘课')
+
+    await e.reply(msgs.join('\n'))
+    return true
+  }
+
+  async unskipCourse(e) {
+    const result = this.resolveTargetUser(e, true)
+    if (result.error) {
+      await e.reply(result.msg)
+      return true
+    }
+
+    const { userId, isOther } = result
+    const dateStr = ScheduleData.getDateString()
+    const skippedList = ScheduleData.getSkippedCourses(userId, dateStr)
+
+    if (skippedList.length === 0) {
+      await e.reply('今日没有翘课记录~')
+      return true
+    }
+
+    if (skippedList.includes('__all__')) {
+      await e.reply('今日已请假，请先 #取消请假 再取消单门课程翘课')
+      return true
+    }
+
+    let input = e.msg.replace(/^#取消翘课\s+/, '').trim()
+    input = input.replace(/@\d+\s*$/, '').trim()
+
+    let targetKey = null
+
+    const index = parseInt(input)
+    if (!isNaN(index) && index >= 1 && index <= skippedList.length) {
+      targetKey = skippedList[index - 1]
+    } else {
+      const matched = skippedList.filter(n => n.includes(input))
+      if (matched.length === 1) {
+        targetKey = matched[0]
+      } else if (matched.length > 1) {
+        const displayItems = matched.map(entry => {
+          const atIndex = entry.indexOf('@')
+          return atIndex > 0 ? `${entry.substring(0, atIndex)} (${entry.substring(atIndex + 1)})` : entry
+        })
+        await e.reply(`找到多个匹配: ${displayItems.join('、')}\n请用序号指定`)
+        return true
+      }
+    }
+
+    if (!targetKey) {
+      await e.reply(`未找到翘课记录「${input}」\n使用 #取消翘课 查看翘课列表`)
+      return true
+    }
+
+    const success = ScheduleData.unskipCourse(userId, dateStr, targetKey)
+    if (success) {
+      const atIndex = targetKey.indexOf('@')
+      const displayName = atIndex > 0 ? `${targetKey.substring(0, atIndex)} (${targetKey.substring(atIndex + 1)})` : targetKey
+      const otherHint = isOther ? ` (替 <${userId}> 操作)` : ''
+      await e.reply(`✅ 已取消翘课: ${displayName}${otherHint}`)
+    } else {
+      await e.reply('操作失败')
+    }
+
+    return true
+  }
+
+  async skipAll(e) {
+    const result = this.resolveTargetUser(e, true)
+    if (result.error) {
+      await e.reply(result.msg)
+      return true
+    }
+
+    const { userId, isOther } = result
+    const data = ScheduleData.getData(userId)
+
+    if (!data) {
+      await e.reply('尚未导入课表数据\n请先使用 #导入课表 导入课表数据')
+      return true
+    }
+
+    const dateStr = ScheduleData.getDateString()
+    const success = ScheduleData.skipAll(userId, dateStr)
+    if (success) {
+      const otherHint = isOther ? ` (替 <${userId}> 操作)` : ''
+      await e.reply(`📋 今日已请假，所有课程标记翘课${otherHint}`)
+    } else {
+      await e.reply('操作失败')
+    }
+
+    return true
+  }
+
+  async unskipAll(e) {
+    const result = this.resolveTargetUser(e, true)
+    if (result.error) {
+      await e.reply(result.msg)
+      return true
+    }
+
+    const { userId, isOther } = result
+    const dateStr = ScheduleData.getDateString()
+    const isLeave = ScheduleData.isAllSkipped(userId, dateStr)
+
+    if (!isLeave) {
+      const skippedList = ScheduleData.getSkippedCourses(userId, dateStr)
+      if (skippedList.length === 0) {
+        await e.reply('今日没有请假/翘课记录~')
+      } else {
+        await e.reply('今日未请假，但有单门课程翘课\n使用 #取消翘课 课程名 取消单门翘课')
+      }
+      return true
+    }
+
+    const success = ScheduleData.unskipAll(userId, dateStr)
+    if (success) {
+      const otherHint = isOther ? ` (替 <${userId}> 操作)` : ''
+      await e.reply(`✅ 已取消今日请假${otherHint}`)
+    } else {
+      await e.reply('操作失败')
+    }
+
+    return true
+  }
+
   async showHelp(e) {
     if (!puppeteer) {
-      // 降级到文字版
       const msg = [
         '📚 课程表帮助',
         '',
@@ -348,11 +692,20 @@ export class schedule extends plugin {
         '【课表查询】',
         '• #课表 - 查看今日课表',
         '• #课表 明天 - 查看指定日期',
+        '• #课表@某人 - 查看他人课表',
         '• 群友在上什么课 - 查看群友课表',
         '',
-        '【其他功能】',
-        '• #翘课 - 标记翘课',
-        '• #删除课表 - 删除数据',
+        '【翘课/请假】',
+        '• #翘课 - 翘当前课/下一节课',
+        '• #翘课 课程名/序号 - 翘指定课程',
+        '• #翘课 列表 - 查看今日课程列表',
+        '• #取消翘课 课程名/序号 - 取消翘课',
+        '• #请假 - 全天请假',
+        '• #取消请假 - 取消请假',
+        '',
+        '【管理员操作】',
+        '• 以上指令后加@某人 可替他人操作',
+        '• 翘课/请假/导入/删除 需管理员权限',
         '',
         '【日期格式】',
         '明天、后天、周一~周日、下周一~下周日、2024-03-15'
@@ -375,7 +728,6 @@ export class schedule extends plugin {
       if (img) {
         await e.reply(img)
       } else {
-        // 降级到文字版
         const msg = [
           '📚 课程表帮助',
           '',
@@ -387,11 +739,20 @@ export class schedule extends plugin {
           '【课表查询】',
           '• #课表 - 查看今日课表',
           '• #课表 明天 - 查看指定日期',
+          '• #课表@某人 - 查看他人课表',
           '• 群友在上什么课 - 查看群友课表',
           '',
-          '【其他功能】',
-          '• #翘课 - 标记翘课',
-          '• #删除课表 - 删除数据'
+          '【翘课/请假】',
+          '• #翘课 - 翘当前课/下一节课',
+          '• #翘课 课程名/序号 - 翘指定课程',
+          '• #翘课 列表 - 查看今日课程列表',
+          '• #取消翘课 课程名/序号 - 取消翘课',
+          '• #请假 - 全天请假',
+          '• #取消请假 - 取消请假',
+          '',
+          '【管理员操作】',
+          '• 以上指令后加@某人 可替他人操作',
+          '• 翘课/请假/导入/删除 需管理员权限'
         ]
         await e.reply(msg.join('\n'))
       }
@@ -403,26 +764,16 @@ export class schedule extends plugin {
     return true
   }
 
-  /**
-   * 群友课表（图片版）
-   */
   async groupScheduleText(e) {
     return await this.renderGroupSchedule(e, null)
   }
 
-  /**
-   * 群友课表（指定日期）
-   */
   async groupScheduleWithDate(e) {
     const dateStr = e.msg.replace(/^#?群友在上什么课\s+/, '').trim()
     return await this.renderGroupSchedule(e, dateStr)
   }
 
-  /**
-   * 渲染群友课表
-   */
   async renderGroupSchedule(e, dateStr) {
-    // 私聊时显示个人课表
     if (!e.isGroup) {
       if (dateStr) {
         e.msg = `#课表 ${dateStr}`
@@ -432,15 +783,14 @@ export class schedule extends plugin {
       }
     }
 
-    // 解析日期
     let timestamp = Math.floor(Date.now() / 1000)
     let dateDisplay = '今日'
-    
+
     if (dateStr) {
       try {
         const now = new Date()
         let targetDate = new Date()
-        
+
         if (dateStr === '明天' || dateStr === '明日') {
           targetDate.setDate(now.getDate() + 1)
         } else if (dateStr === '后天') {
@@ -470,7 +820,7 @@ export class schedule extends plugin {
             throw new Error('Invalid date')
           }
         }
-        
+
         timestamp = Math.floor(targetDate.getTime() / 1000)
         const date = new Date(timestamp * 1000)
         dateDisplay = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`
@@ -482,37 +832,30 @@ export class schedule extends plugin {
 
     const current = timestamp
     const currentTime = new Date(timestamp * 1000).toTimeString().slice(0, 5)
-    
-    // 获取群成员列表
+
     let memberList = []
     try {
       logger.info(`[课程表] 开始获取群成员列表，群号: ${e.group_id}`)
-      
-      // TRSS-Yunzai / Miao-Yunzai 获取群成员方式
+
       if (e.group) {
-        // 方式1: getMemberMap
         if (typeof e.group.getMemberMap === 'function') {
           logger.info('[课程表] 使用方式1: e.group.getMemberMap')
           const memberMap = await e.group.getMemberMap()
           memberList = Array.from(memberMap.values())
-        }
-        // 方式2: pickMember (TRSS-Yunzai)
-        else if (e.bot && e.bot.pickGroup) {
+        } else if (e.bot && e.bot.pickGroup) {
           logger.info('[课程表] 使用方式2: e.bot.pickGroup')
           const group = e.bot.pickGroup(e.group_id)
           const memberMap = await group.getMemberMap()
           memberList = Array.from(memberMap.values())
-        }
-        // 方式3: 直接从 Bot
-        else if (Bot && Bot.gl && Bot.gl.get(e.group_id)) {
+        } else if (Bot && Bot.gl && Bot.gl.get(e.group_id)) {
           logger.info('[课程表] 使用方式3: Bot.gl.get')
           const group = Bot.gl.get(e.group_id)
           memberList = Array.from(group.values())
         }
       }
-      
+
       logger.info(`[课程表] 获取到 ${memberList.length} 个群成员`)
-      
+
       if (memberList.length === 0) {
         logger.warn('[课程表] 无法获取群成员列表')
         await e.reply('暂未配置课程表哦…\n使用 #导入课表 指令即可设置～')
@@ -526,24 +869,27 @@ export class schedule extends plugin {
 
     const results = []
     const statusTypes = ['分身中', '进行中', '翘课中', '下一节', '已结束', '无课程']
+    const targetDateStr = ScheduleData.getDateString(current)
 
     for (const member of memberList) {
       const userId = member.user_id
       const data = ScheduleData.getData(userId)
-      
+
       if (!data) continue
 
       const todayCourses = getCourses(data, current)
       if (todayCourses === false) continue
 
       const nickname = member.card || member.nickname || userId
-      const isAbandoned = ScheduleData.isAbandoned(userId)
+      const skippedList = ScheduleData.getSkippedCourses(userId, targetDateStr)
+      const isLeave = skippedList.includes('__all__')
 
       if (todayCourses.length === 0) {
         results.push({
           userId,
           nickname,
           type: 5,
+          isLeave: false,
           mainDesc: '今日无课程',
           subDesc: '好好休息~',
           order: 999999,
@@ -552,7 +898,6 @@ export class schedule extends plugin {
         continue
       }
 
-      // 查找当前/下节课
       const nowCourses = []
       let nextCourse = null
 
@@ -577,24 +922,45 @@ export class schedule extends plugin {
         endTime.setHours(parseInt(h), parseInt(m), 0)
         const remain = Math.ceil((endTime - Date.now()) / 60000)
 
-        if (nowCourses.length > 1) {
-          const descriptions = nowCourses.map(c => 
-            `${c.name.charAt(0)}${c.startTime}-${c.endTime}`
-          )
+        if (isLeave) {
+          results.push({
+            userId,
+            nickname,
+            type: 2,
+            isLeave: true,
+            isSkipped: false,
+            mainDesc: '今日请假',
+            subDesc: timezoneHint ? `时区 ${timezone}` : '全天休息',
+            order: remain,
+            subOrder: new Date(`1970-01-01 ${course.startTime}`).getTime()
+          })
+        } else if (nowCourses.length > 1) {
+          const descriptions = nowCourses.map(c => {
+            const skipped = isSkippedEntry(skippedList, c.name, c.startTime)
+            return `${c.name.charAt(0)}${skipped ? '[翘]' : ''}${c.startTime}-${c.endTime}`
+          })
           results.push({
             userId,
             nickname,
             type: 0,
-            mainDesc: nowCourses.map(c => c.name).join(' / '),
+            isLeave: false,
+            isSkipped: false,
+            mainDesc: nowCourses.map(c => {
+              const skipped = isSkippedEntry(skippedList, c.name, c.startTime)
+              return skipped ? `${c.name}[翘]` : c.name
+            }).join(' / '),
             subDesc: descriptions.join(' / ') + timezoneHint,
             order: remain,
             subOrder: new Date(`1970-01-01 ${course.startTime}`).getTime()
           })
         } else {
+          const isCourseSkipped = isSkippedEntry(skippedList, course.name, course.startTime)
           results.push({
             userId,
             nickname,
-            type: isAbandoned ? 2 : 1,
+            type: isCourseSkipped ? 2 : 1,
+            isLeave: false,
+            isSkipped: isCourseSkipped,
             mainDesc: course.name,
             subDesc: `${course.startTime}-${course.endTime}${timezoneHint} (剩余 ${remain} 分钟)`,
             order: remain,
@@ -607,16 +973,33 @@ export class schedule extends plugin {
         startTime.setHours(parseInt(h), parseInt(m), 0)
         const remain = Math.ceil((startTime - Date.now()) / 60000)
         const remainText = remain > 60 ? `${Math.floor(remain / 60)} 小时` : `${remain} 分钟`
-        
-        results.push({
-          userId,
-          nickname,
-          type: 3,
-          mainDesc: nextCourse.name,
-          subDesc: `${nextCourse.startTime}-${nextCourse.endTime}${timezoneHint} (${remainText}后)`,
-          order: new Date(`1970-01-01 ${nextCourse.startTime}`).getTime(),
-          subOrder: new Date(`1970-01-01 ${nextCourse.endTime}`).getTime()
-        })
+
+        if (isLeave) {
+          results.push({
+            userId,
+            nickname,
+            type: 2,
+            isLeave: true,
+            isSkipped: false,
+            mainDesc: '今日请假',
+            subDesc: timezoneHint ? `时区 ${timezone}` : '全天休息',
+            order: new Date(`1970-01-01 ${nextCourse.startTime}`).getTime(),
+            subOrder: new Date(`1970-01-01 ${nextCourse.endTime}`).getTime()
+          })
+        } else {
+          const isNextSkipped = isSkippedEntry(skippedList, nextCourse.name, nextCourse.startTime)
+          results.push({
+            userId,
+            nickname,
+            type: 3,
+            isLeave: false,
+            isSkipped: isNextSkipped,
+            mainDesc: nextCourse.name,
+            subDesc: `${nextCourse.startTime}-${nextCourse.endTime}${timezoneHint} (${remainText}后)`,
+            order: new Date(`1970-01-01 ${nextCourse.startTime}`).getTime(),
+            subOrder: new Date(`1970-01-01 ${nextCourse.endTime}`).getTime()
+          })
+        }
       } else {
         const totalMinutes = todayCourses.reduce((sum, c) => {
           const [sh, sm] = c.startTime.split(':')
@@ -624,16 +1007,33 @@ export class schedule extends plugin {
           return sum + (parseInt(eh) * 60 + parseInt(em) - parseInt(sh) * 60 - parseInt(sm))
         }, 0)
         const hours = (totalMinutes / 60).toFixed(1)
-        
-        results.push({
-          userId,
-          nickname,
-          type: 4,
-          mainDesc: '今日课程已上完',
-          subDesc: `共计 ${hours} 小时`,
-          order: -parseFloat(hours),
-          subOrder: 0
-        })
+
+        if (isLeave) {
+          results.push({
+            userId,
+            nickname,
+            type: 2,
+            isLeave: true,
+            isSkipped: false,
+            mainDesc: '今日请假',
+            subDesc: timezoneHint ? `时区 ${timezone}` : '课程已结束',
+            order: -parseFloat(hours),
+            subOrder: 0
+          })
+        } else {
+          const hasSkipped = todayCourses.some(c => isSkippedEntry(skippedList, c.name, c.startTime))
+          results.push({
+            userId,
+            nickname,
+            type: 4,
+            isLeave: false,
+            isSkipped: hasSkipped,
+            mainDesc: '今日课程已上完',
+            subDesc: `共计 ${hours} 小时`,
+            order: -parseFloat(hours),
+            subOrder: 0
+          })
+        }
       }
     }
 
@@ -642,59 +1042,50 @@ export class schedule extends plugin {
       return true
     }
 
-    // 排序
     results.sort((a, b) => {
       if (a.type !== b.type) return a.type - b.type
       if (a.order !== b.order) return a.order - b.order
       return a.subOrder - b.subOrder
     })
 
-    // 渲染图片
     try {
       const data = {
         results,
         statusTypes,
-        timestamp: new Date().toLocaleString('zh-CN', { 
-          year: 'numeric', 
-          month: '2-digit', 
-          day: '2-digit', 
-          hour: '2-digit', 
-          minute: '2-digit', 
+        timestamp: new Date().toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
           second: '2-digit',
-          hour12: false 
+          hour12: false
         }).replace(/\//g, '-'),
         groupId: e.group_id
       }
 
-      // 使用云崽的渲染功能
       const img = await this.renderImage(data)
-      
+
       if (img) {
         await e.reply(img)
       } else {
-        // 降级到文字版
         await this.sendTextVersion(e, results, statusTypes)
       }
     } catch (err) {
       logger.error('[课程表] 渲染图片失败:', err)
-      // 降级到文字版
       await this.sendTextVersion(e, results, statusTypes)
     }
 
     return true
   }
 
-  /**
-   * 渲染图片（使用云崽的 puppeteer）
-   */
   async renderImage(data) {
     if (!puppeteer) {
       logger.warn('[课程表] puppeteer 不可用')
       return null
     }
-    
+
     try {
-      // 云崽标准渲染方式
       return await puppeteer.screenshot('schedule-plugin', {
         tplFile: './plugins/schedule-plugin/resources/html/groupSchedule.html',
         ...data
@@ -705,15 +1096,12 @@ export class schedule extends plugin {
     }
   }
 
-  /**
-   * 渲染个人课表图片
-   */
   async renderScheduleImage(data) {
     if (!puppeteer) {
       logger.warn('[课程表] puppeteer 不可用')
       return null
     }
-    
+
     try {
       return await puppeteer.screenshot('schedule-plugin', {
         tplFile: './plugins/schedule-plugin/resources/html/schedule.html',
@@ -725,15 +1113,14 @@ export class schedule extends plugin {
     }
   }
 
-  /**
-   * 发送文字版本（降级方案）
-   */
   async sendTextVersion(e, results, statusTypes) {
     const msgs = ['📚 群友课表状态\n']
     for (const result of results) {
-      const statusEmoji = ['🔴', '🔴', '🟠', '🔵', '🟢', '⚪'][result.type]
+      const statusEmoji = ['🔴', '🔴', '🟠', '🔵', '🟢', '⚪', '🟠'][result.isLeave ? 6 : result.type]
+      const statusText = result.isLeave ? '请假中' : statusTypes[result.type]
+      const skipHint = (result.isSkipped && !result.isLeave) ? ' [已翘]' : ''
       msgs.push(`${statusEmoji} ${result.nickname}`)
-      msgs.push(`   [${statusTypes[result.type]}] ${result.mainDesc}`)
+      msgs.push(`   [${statusText}${skipHint}] ${result.mainDesc}`)
       if (result.subDesc) {
         msgs.push(`   ${result.subDesc}`)
       }

@@ -6,13 +6,13 @@
   <title>群友在上什么课</title>
   <style>
     :root {
-      /* 加深了底色(bg)饱和度，并增加了边框色(border)，解决与纯白容器混淆的问题 */
-      --c0-bg: #FCE7F3; --c0-border: #FBCFE8; --c0-main: #EC4899; --c0-dark: #9D174D; /* 粉色 */
-      --c1-bg: #FEE2E2; --c1-border: #FECACA; --c1-main: #EF4444; --c1-dark: #991B1B; /* 红色 */
-      --c2-bg: #FFEDD5; --c2-border: #FED7AA; --c2-main: #F97316; --c2-dark: #9A3412; /* 橙色 */
-      --c3-bg: #DBEAFE; --c3-border: #BFDBFE; --c3-main: #3B82F6; --c3-dark: #1E40AF; /* 蓝色 */
-      --c4-bg: #DCFCE7; --c4-border: #BBF7D0; --c4-main: #22C55E; --c4-dark: #166534; /* 绿色 */
-      --c5-bg: #F1F5F9; --c5-border: #E2E8F0; --c5-main: #64748B; --c5-dark: #334155; /* 灰色 */
+      --c0-bg: #FCE7F3; --c0-border: #FBCFE8; --c0-main: #EC4899; --c0-dark: #9D174D;
+      --c1-bg: #FEE2E2; --c1-border: #FECACA; --c1-main: #EF4444; --c1-dark: #991B1B;
+      --c2-bg: #FFEDD5; --c2-border: #FED7AA; --c2-main: #F97316; --c2-dark: #9A3412;
+      --c3-bg: #DBEAFE; --c3-border: #BFDBFE; --c3-main: #3B82F6; --c3-dark: #1E40AF;
+      --c4-bg: #DCFCE7; --c4-border: #BBF7D0; --c4-main: #22C55E; --c4-dark: #166534;
+      --c5-bg: #F1F5F9; --c5-border: #E2E8F0; --c5-main: #64748B; --c5-dark: #334155;
+      --c6-bg: #FFF7ED; --c6-border: #FED7AA; --c6-main: #EA580C; --c6-dark: #9A3412;
     }
 
     * {
@@ -88,6 +88,7 @@
     .schedule-item.type-3 { background: var(--c3-bg); border: 1px solid var(--c3-border); }
     .schedule-item.type-4 { background: var(--c4-bg); border: 1px solid var(--c4-border); }
     .schedule-item.type-5 { background: var(--c5-bg); border: 1px solid var(--c5-border); }
+    .schedule-item.type-6 { background: var(--c6-bg); border: 1px solid var(--c6-border); }
 
     /* 左侧彩色指示条 */
     .schedule-item::before {
@@ -105,6 +106,7 @@
     .schedule-item.type-3::before { background: var(--c3-main); }
     .schedule-item.type-4::before { background: var(--c4-main); }
     .schedule-item.type-5::before { background: var(--c5-main); }
+    .schedule-item.type-6::before { background: var(--c6-main); }
 
     .avatar {
       width: 64px;
@@ -166,6 +168,7 @@
     .course-name.type-3 { color: var(--c3-dark); }
     .course-name.type-4 { color: var(--c4-dark); }
     .course-name.type-5 { color: var(--c5-dark); }
+    .course-name.type-6 { color: var(--c6-dark); }
 
     .status-badge {
       display: inline-flex;
@@ -186,6 +189,7 @@
     .status-badge.type-3 { background: var(--c3-main); }
     .status-badge.type-4 { background: var(--c4-main); }
     .status-badge.type-5 { background: var(--c5-main); }
+    .status-badge.type-6 { background: var(--c6-main); }
 
     .course-time {
       font-size: 14px;
@@ -194,6 +198,19 @@
       align-items: center;
       gap: 4px;
       font-weight: 500;
+    }
+
+    .skip-tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(249, 115, 22, 0.15);
+      color: #EA580C;
+      margin-left: 6px;
+      border: 1px solid rgba(249, 115, 22, 0.3);
     }
 
     .footer {
@@ -249,13 +266,13 @@
 
     <div class="schedule-list">
       {{each results item}}
-      <div class="schedule-item type-{{item.type}}">
+      <div class="schedule-item type-{{if item.isLeave}}6{{else}}{{item.type}}{{/if}}">
         <img class="avatar" src="https://q1.qlogo.cn/g?b=qq&nk={{item.userId}}&s=640" alt="avatar">
         
         <div class="info-container">
           <div class="primary-info">
             <div class="nickname">{{item.nickname}}</div>
-            <div class="course-name type-{{item.type}}">
+            <div class="course-name type-{{if item.isLeave}}6{{else}}{{item.type}}{{/if}}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
                 <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
@@ -265,7 +282,10 @@
           </div>
           
           <div class="secondary-info">
-            <div class="status-badge type-{{item.type}}">{{statusTypes[item.type]}}</div>
+            <div class="status-badge type-{{if item.isLeave}}6{{else}}{{item.type}}{{/if}}">{{if item.isLeave}}请假中{{else}}{{statusTypes[item.type]}}{{/if}}</div>
+            {{if item.isSkipped && !item.isLeave}}
+            <span class="skip-tag">已翘</span>
+            {{/if}}
             <div class="course-time">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
