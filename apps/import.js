@@ -4,6 +4,11 @@ import axios from 'axios'
 import ical from 'node-ical'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
+import { 
+  importScheduleFromStarlinkCode,
+  importScheduleFromJsonData,
+  importScheduleFromIcsData
+} from '../services/scheduleImporter.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -17,7 +22,7 @@ export class scheduleImport extends plugin {
       priority: 4999,
       rule: [
         {
-          reg: '^#导入wakeup\\s+(.+)$',
+          reg: '^#导入wakeup\\s+(.+)',
           fnc: 'importWakeUpByCommand'
         },
         {
@@ -25,8 +30,20 @@ export class scheduleImport extends plugin {
           fnc: 'importWakeUpAuto'
         },
         {
-          reg: '^#导入ics\\s+(.+)$',
+          reg: '^#导入ics\\s+(.+)',
           fnc: 'importICS'
+        },
+        {
+          reg: '^这是来自「星链课表」的课表分享.*?分享码为「(.+?)」',
+          fnc: 'importStarlinkAuto'
+        },
+        {
+          reg: '^#导入星链\\s+(.+)',
+          fnc: 'importStarlinkByCommand'
+        },
+        {
+          reg: '^#导入课表$',
+          fnc: 'importScheduleFile'
         }
       ]
     })
@@ -323,6 +340,128 @@ export class scheduleImport extends plugin {
     } catch (err) {
       logger.error(`[课程表] ICS导入失败: ${err}`)
       await e.reply('导入失败，请检查链接是否正确')
+    }
+
+    return true
+  }
+
+  // 星链课表自动导入
+  async importStarlinkAuto(e) {
+    const match = e.msg.match(/分享码为「(.+?)」/)
+    if (!match) {
+      await e.reply('未找到分享码')
+      return true
+    }
+
+    return await this.doImportStarlink(e, match[1])
+  }
+
+  // 星链课表命令导入
+  async importStarlinkByCommand(e) {
+    const code = e.msg.replace(/^#导入星链\s+/, '').trim()
+
+    if (!code) {
+      await e.reply('请提供星链分享码\n格式：#导入星链 <分享码>')
+      return true
+    }
+
+    const match = code.match(/「(.+?)」/)
+    const finalCode = match ? match[1] : code
+
+    return await this.doImportStarlink(e, finalCode)
+  }
+
+  async doImportStarlink(e, code) {
+    const result = this.resolveTargetUser(e)
+    if (result.error) {
+      await e.reply(result.msg)
+      return true
+    }
+
+    const { userId, isOther } = result
+
+    await e.reply('正在读取星链课程表...')
+
+    try {
+      const importResult = await importScheduleFromStarlinkCode(userId, code, e)
+      
+      if (importResult.success) {
+        let msg = importResult.message
+        if (isOther) {
+          msg += ` (导入至 <${userId}>)`
+        }
+        await e.reply(msg)
+      } else {
+        await e.reply(importResult.message)
+      }
+    } catch (err) {
+      logger.error(`[课程表] 星链导入失败: ${err}`)
+      await e.reply('导入失败，请稍后重试')
+    }
+
+    return true
+  }
+
+  // 文件导入（支持JSON和ICS）
+  async importScheduleFile(e) {
+    const result = this.resolveTargetUser(e)
+    if (result.error) {
+      await e.reply(result.msg)
+      return true
+    }
+
+    const { userId, isOther } = result
+
+    // 检查是否有文件
+    if (!e.file || !e.file.url) {
+      await e.reply('请上传课表文件（支持拾光导出的JSON格式或ICS日历文件）\n格式：发送 #导入课表 并上传文件')
+      return true
+    }
+
+    await e.reply('正在读取课表文件...')
+
+    try {
+      const response = await axios.get(e.file.url, {
+        timeout: 15000,
+        responseType: 'text'
+      })
+
+      const fileContent = response.data
+      const fileName = e.file.name || ''
+
+      let importResult
+
+      // 判断文件类型
+      if (fileName.endsWith('.json') || fileName.endsWith('.JSON')) {
+        // JSON文件
+        try {
+          const jsonData = JSON.parse(fileContent)
+          importResult = await importScheduleFromJsonData(userId, jsonData, e)
+        } catch (parseErr) {
+          await e.reply('JSON文件解析失败，请检查文件格式是否正确')
+          return true
+        }
+      } else if (fileName.endsWith('.ics') || fileName.endsWith('.ICS') || fileContent.includes('BEGIN:VCALENDAR')) {
+        // ICS文件
+        importResult = await importScheduleFromIcsData(userId, fileContent, e)
+      } else {
+        await e.reply('不支持的文件格式，请上传JSON或ICS文件')
+        return true
+      }
+
+      if (importResult.success) {
+        let msg = importResult.message
+        if (isOther) {
+          msg += ` (导入至 <${userId}>)`
+        }
+        await e.reply(msg)
+      } else {
+        await e.reply(importResult.message)
+      }
+
+    } catch (err) {
+      logger.error(`[课程表] 文件导入失败: ${err}`)
+      await e.reply('导入失败，请检查文件是否正确或稍后重试')
     }
 
     return true
